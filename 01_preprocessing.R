@@ -75,7 +75,8 @@ removeDoublets <- function(flowFrame, d1="FSC-A", d2="FSC-H", w=NULL,silent=TRUE
 # Read the meta data #
 ######################
 
-meta_patients <- read.csv(paste(FCSloc,"MetaDataTrain.csv",sep="/"),as.is=TRUE)
+#changed path to read from the "attachments" sub-directory
+meta_patients <- read.csv(paste(FCSloc,"attachments","MetaDataTrain.csv",sep="/"),as.is=TRUE)
 
 filenames <- c(rbind(meta_patients[,"Stim"],meta_patients[,"Unstim"]))
 
