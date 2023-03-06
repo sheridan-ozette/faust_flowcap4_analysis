@@ -1,67 +1,84 @@
-##########################
-# Submission FlowCAP IV  #
-# Step 1 - Preprocessing #
-##########################
-FCSloc <- file.path(normalizePath("."),"FR-FCM-ZZ99")
-if (!dir.exists(file.path(FCSloc,"dambi"))) {
-    dir.create(file.path(FCSloc,"dambi"))
-}
-
-#############################################
-# Load the required libraries and functions #
-#############################################
-
+# Libraries
 library(flowCore)
 library(flowDensity)
 
-# Quality control function
-medianTime_select <- function(flowFrame, parameter, nIntervals, maxDiff){
+
+# Parameters
+original_analysis_name <- 'tcells'
+new_analysis_name <- 'lymphocytes'
+
+# Directories
+
+## setwd() to directory containing FR-FCM-ZZ99
+base_dir <- file.path(normalizePath("."), "FR-FCM-ZZ99")
+
+## original analysis
+if (!dir.exists(file.path(base_dir, original_analysis_name))) {
+    dir.create(file.path(base_dir, original_analysis_name))
+}
+
+## new analysis
+if (!dir.exists(file.path(base_dir, new_analysis_name))) {
+  dir.create(file.path(base_dir, new_analysis_name))
+}
+
+
+# Time Gating
+medianTime_select <- function(flowFrame, parameter, nIntervals, maxDiff) {
   # Split the data in equal size intervals
-  cuts <- cut(exprs(flowFrame)[,"Time"],breaks=nIntervals)
-  splitted <- split(as.data.frame(exprs(flowFrame)),cuts)
+  cuts <- cut(exprs(flowFrame)[, "Time"], breaks = nIntervals)
+  splitted <- split(as.data.frame(exprs(flowFrame)), cuts)
   
   # Count the number of cells in each interval
-  counts <- sapply(splitted,function(flowDataFrame){dim(flowDataFrame)[1]})
-  enoughCells <- counts > median(counts)-(2*sd(counts))
+  counts <- sapply(splitted, function(flowDataFrame) dim(flowDataFrame)[1])
+  enoughCells <- counts > median(counts) - (2 * sd(counts))
   
   # Calculate the median values of the cells in each interval
-  medians <- sapply(splitted,function(flowDataFrame){median(flowDataFrame[,parameter])})
-  stableMedian <- abs(diff(medians))<maxDiff
-  stableMedian <- c(T,stableMedian) & c(stableMedian,T)
+  medians <- sapply(splitted, function(flowDataFrame) median(flowDataFrame[, parameter]))
+  stableMedian <- abs(diff(medians)) < maxDiff
+  stableMedian <- c(T, stableMedian) & c(stableMedian, T)
   
   # Return only the cells which meet the conditions
   selection <- which(enoughCells & stableMedian)
   return(flowFrame[which(as.numeric(cuts) %in% selection),])
 }
 
-# Function to remove events on the margins
-removeMargins <- function(flowFrame,dimensions){
+# Margin Gating
+removeMargins <- function(flowFrame, dimensions) {
   # Look op the accepted ranges for the dimensions
   meta <- pData(flowFrame@parameters)
-  rownames(meta) <- meta[,"name"]
+  rownames(meta) <- meta[, "name"]
   
   # Initialize variables
-  selection <- rep(TRUE,times=dim(flowFrame)[1])
+  selection <- rep(TRUE, times = dim(flowFrame)[1])
   e <- exprs(flowFrame)
   
   # Make selection
   for(d in dimensions){
     selection <- selection & 
-      e[,d] > max(meta[d,"minRange"],min(e[,d])) &
-      e[,d] < min(meta[d,"maxRange"],max(e[,d]))
+      e[, d] > max(meta[d, "minRange"], min(e[, d])) &
+      e[, d] < min(meta[d, "maxRange"], max(e[, d]))
   }
   return(flowFrame[selection,])
 }
 
 # Function to select single cells
-removeDoublets <- function(flowFrame, d1="FSC-A", d2="FSC-H", w=NULL,silent=TRUE){
+removeDoublets <- function(
+    flowFrame,
+    d1 = "FSC-A",
+    d2 = "FSC-H",
+    w = NULL,
+    silent = TRUE
+  ) {
   # Calculate the ratios
-  ratio <- exprs(flowFrame)[,d1] / (1+ exprs(flowFrame)[,d2])
+  ratio <- exprs(flowFrame)[, d1] / (1+ exprs(flowFrame)[, d2])
   
   # Define the region that is accepted
   r <- median(ratio)
-  if(is.null(w)){ w <- 2*sd(ratio) }
-  if(!silent){
+  if(is.null(w)) {
+    w <- 2 * sd(ratio)
+  }
+  if(!silent) {
     print(r)
     print(w)
   }
@@ -71,29 +88,28 @@ removeDoublets <- function(flowFrame, d1="FSC-A", d2="FSC-H", w=NULL,silent=TRUE
   return(flowFrame[selection,])
 }
 
-######################
-# Read the meta data #
-######################
 
-#changed path to read from the "attachments" sub-directory
-meta_patients <- read.csv(paste(FCSloc,"attachments","MetaDataTrain.csv",sep="/"),as.is=TRUE)
+# Metadata
+meta_patients <- read.csv(paste(
+  base_dir,
+  "attachments",
+  "MetaDataTrain.csv",
+  sep="/"
+), as.is = TRUE)
 
-filenames <- c(rbind(meta_patients[,"Stim"],meta_patients[,"Unstim"]))
-
-#############################
-# Initialize some variables #
-#############################
+filenames <- c(rbind(meta_patients[, "Stim"], meta_patients[, "Unstim"]))
 
 colnames_meta <- c("File","Original","Bad quality","On margins","doublets","Alive T cells",
                    "% Good quality","% Not on margins","% Single cells","% Alive T cells")
-meta <- matrix(0,nrow=length(filenames),ncol=10,dimnames=list(filenames,colnames_meta))
+meta <- matrix(0,nrow=length(filenames),ncol=length(colnames_meta),
+               dimnames=list(filenames,colnames_meta))
 
 #######################
 # Preprocess the data #
 #######################
 
 for(file in filenames){
-  flowFrame <- read.FCS(paste(FCSloc,file,sep="/"))
+  flowFrame <- read.FCS(paste(base_dir,file,sep="/"))
   
   # a. Quality Control
   flowFrame_q <- medianTime_select(flowFrame,"FSC-A",100,10000)
@@ -146,8 +162,9 @@ for(file in filenames){
   }
   
   
-  # Save the result
-  write.FCS(flowFrame_a,paste(FCSloc,"/dambi/",gsub(".fcs","",file),"_preprocessed.fcs",sep=""))
+  # Save the result both pre- (allcells) and post- (dambi) T-cell gating
+  write.FCS(flowFrame_a,paste(base_dir,"/dambi/",gsub(".fcs","",file),"_preprocessed.fcs",sep=""))
+  write.FCS(flowFrame_t,paste(base_dir,"/allcells/",gsub(".fcs","",file),"_preprocessed.fcs",sep=""))
   # Save some metadata
   meta[file,] <- c(file,dim(flowFrame)[1],
                    dim(flowFrame)[1]-dim(flowFrame_q)[1],dim(flowFrame_q)[1]-dim(flowFrame_m)[1],
@@ -156,4 +173,4 @@ for(file in filenames){
                    dim(flowFrame_d)[1]/dim(flowFrame_m)[1],dim(flowFrame_a)[1]/dim(flowFrame_t)[1])
   print(meta[file,])
 }
-write.csv(meta,file=paste(FCSloc,"/dambi/MetaData_preprocessing.csv", sep=""))
+write.csv(meta,file=paste(base_dir,"/dambi/MetaData_preprocessing.csv", sep=""))

@@ -2,8 +2,11 @@ library(stringr)
 library(flowCore)
 library(flowWorkspace)
 library(dplyr)
+
+pop <- 'allcells'  # or 'dambi'
 projPath <- normalizePath(".")
-fcsFiles <- setdiff(list.files(file.path(projPath,"FR-FCM-ZZ99","dambi")),c("MetaData_preprocessing.csv"))
+fcsFiles <- setdiff(list.files(file.path(projPath,"FR-FCM-ZZ99",pop)),
+                    c("MetaData_preprocessing.csv"))
 
 #
 #bring in meta data and derive file for later use.
@@ -39,7 +42,7 @@ saveRDS(allMeta,
 ffList <- list()
 for (ff in fcsFiles) {
     print(ff)
-    ffIn <- read.FCS(file.path(projPath,"FR-FCM-ZZ99","dambi",ff))
+    ffIn <- read.FCS(file.path(projPath,"FR-FCM-ZZ99",pop,ff))
     ffList <- append(ffList,list(ffIn))
     names(ffList)[length(ffList)] <- ff
 }
@@ -50,15 +53,16 @@ pd$fileNum <- paste0(str_extract(pd[,"name"],"\\d\\d\\d"),".fcs")
 pdm <- inner_join(pd,allMeta,by=c("fileNum"))
 rownames(pdm) <- pdm[,"name"]
 pData(gs) <- pdm
-save_gs(gs,"./flowReMi_gs")
+save_gs(gs,paste0("./flowReMi_gs", "_", pop))
 
 #
 #save a copy of the gating set meta data
 #
-gs <- load_gs("./flowReMi_gs")
+gs <- load_gs(paste0("./flowReMi_gs", "_", pop))
 flowReMi_metaData <- as.data.frame(pData(gs))
 flowReMi_metaData$Survival.Time <- as.numeric(flowReMi_metaData$Survival.Time)
 flowReMi_metaData$stimStatus <- as.numeric(flowReMi_metaData$stimStatus)
 flowReMi_metaData$inTraining <- as.numeric(flowReMi_metaData$inTraining)
 flowReMi_metaData$Status <- as.numeric(flowReMi_metaData$Status)
-saveRDS(flowReMi_metaData,"./flowReMi_metaData.rds")
+saveRDS(flowReMi_metaData,paste0("./flowReMi_metaData_", pop, ".rds"))
+        
